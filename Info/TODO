@@ -1,0 +1,4 @@
+EXEInfo - https://learn.microsoft.com/en-us/windows/win32/debug/pe-format
+Just print some of the important values from an executable's header. We need this before we can
+Find and read from the different sections.
+
