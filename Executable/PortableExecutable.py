@@ -16,6 +16,8 @@ class PortableExecutable:
             magic_pe64 = 0x20b
             if self.magic_num in [magic_pe32, magic_pe64]:
                 self._parse_win_optional_header(file)
+                self._parse_win_data_directories(file)
+                self._parse_section_table(file)
             i = 0
 
     def print_details(self):
@@ -53,7 +55,6 @@ class PortableExecutable:
         file_obj.seek(self.PEheader_offset + 24) # skip Coff header
         OPTHeaderFormat = "<HBBIIIIII"
         std_opt_chunks = struct.unpack(OPTHeaderFormat, file_obj.read(28))
-
 
         self.magic_num = std_opt_chunks[0]
         self.major_linker_vers = std_opt_chunks[1]
@@ -102,12 +103,71 @@ class PortableExecutable:
         self.check_sum = chunks[12]
         self.sub_system = chunks[13]
         self.dll_characteristics = chunks[14]
-        self.size_of_stack_reserve = chunks[14]
-        self.size_of_stack_commit = chunks[15]
-        self.size_of_heap_reserve = chunks[16]
-        self.size_of_heap_commit = chunks[17]
-        self.loader_flags = chunks[18] # Should be zero
-        self.number_of_rva_and_sizes = chunks[19]
+        self.size_of_stack_reserve = chunks[15]
+        self.size_of_stack_commit = chunks[16]
+        self.size_of_heap_reserve = chunks[17]
+        self.size_of_heap_commit = chunks[18]
+        self.loader_flags = chunks[19] # Should be zero
+        self.number_of_rva_and_sizes = chunks[20]
+
+        self.data_dir_offset = self.PEheader_offset + 24 + std_optsize + struct.calcsize(format)
+
+    def _parse_win_data_directories(self, file_obj):
+        magic_pe32 = 0x10b
+        magic_pe64 = 0x20b
+
+        file_obj.seek(self.data_dir_offset)
+
+        data_dir_types = [
+            "Export Table",
+            "Import Table",
+            "Resource Table",
+            "Exception Table",
+            "Certificate Table",
+            "Base Relocation Table",
+            "Debug",
+            "Architecture",
+            "Global Ptr",
+            "TLS Table",
+            "Load Config Table",
+            "Bound Import",
+            "IAT",
+            "Delay Import Descriptor",
+            "CLR Runtime Header",
+            "Reserved, must be zero"
+        ]
+        self.data_directories = {}
+        data_dir_entry_format = "<II"
+
+        for i in range(0, self.number_of_rva_and_sizes):
+            raw_dir_entry = file_obj.read(struct.calcsize(data_dir_entry_format))
+            dir_entry = struct.unpack(data_dir_entry_format, raw_dir_entry)
+            self.data_directories[data_dir_types[i]] = {"RVA": dir_entry[0], "Size": dir_entry[1]}
+
+        self.section_table_offset = file_obj.tell()
+        print(self.data_directories)
+
+    def _parse_section_table(self, file_obj):
+        file_obj.seek(self.section_table_offset)
+        self.section_table = dict()
+        section_header_fmt = "<IIIIIIHHI"
+        for i in range(0, self.number_of_sections):
+            name = file_obj.read(8).decode('ascii').replace("\0","")
+            raw_section_header = file_obj.read(struct.calcsize(section_header_fmt))
+            section_header_chunks = struct.unpack(section_header_fmt, raw_section_header)
+            section_header = SectionHeader()
+            section_header.Name = name
+            section_header.VirtualSize = section_header_chunks[0]
+            section_header.VirtualAddress = section_header_chunks[1]
+            section_header.SizeOfRawData = section_header_chunks[2]
+            section_header.PointerToRawData = section_header_chunks[3]
+            section_header.PointerToRelocations = section_header_chunks[4]
+            section_header.PointerToLineNumbers = section_header_chunks[5]
+            section_header.NumberOfRelocations = section_header_chunks[6]
+            section_header.NumberOfLineNumbers = section_header_chunks[7]
+            section_header.Characteristics = section_header_chunks[8]
+            self.section_table[name] = section_header
+        print(self.section_table)
 
     def __str__(self):
 
@@ -115,8 +175,19 @@ class PortableExecutable:
         return f"Windows Portable Executable {filename}"
 
 
+class SectionHeader:
+    def __init__(self):
+        self.Name = ""
+        self.VirtualSize = 0
+        self.VirtualAddress = 0
+        self.SizeOfRawData = 0
+        self.PointerToRawData = 0
+        self.PointerToRelocations = 0
+        self.PointerToLineNumbers = 0
+        self.NumberOfRelocations = 0
+        self.NumberOfLineNumbers = 0
+        self.Characteristics = 0
 
-
-
-
+    def __str__(self):
+        return f"{self.Name} section at {hex(self.VirtualAddress)}"
 

@@ -10,6 +10,7 @@ def main():
 
     PE = Executable.PortableExecutable("TestEXEs/putty.exe")
     print(PE)
+
 if __name__ == "__main__":
     main()
 
